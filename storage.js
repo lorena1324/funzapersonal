@@ -1,12 +1,9 @@
-// Capa de almacenamiento: Google Sheets (si hay URL configurada) o localStorage (modo prueba).
+// Almacenamiento dentro del aplicativo (memoria del navegador / localStorage).
+// No usa ninguna base de datos externa.
 (function () {
   const LS_KEY = "inlotrans_asistencia_v1";
 
-  function remote() {
-    return !!(window.CONFIG && CONFIG.APPS_SCRIPT_URL);
-  }
-
-  function readLocal() {
+  function leer() {
     try {
       return JSON.parse(localStorage.getItem(LS_KEY)) || [];
     } catch (e) {
@@ -14,47 +11,41 @@
     }
   }
 
-  function writeLocal(list) {
+  function escribir(list) {
     localStorage.setItem(LS_KEY, JSON.stringify(list));
   }
 
-  async function post(body) {
-    // text/plain evita el preflight CORS que Apps Script no soporta
-    const res = await fetch(CONFIG.APPS_SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || "Error del servidor");
-    return data;
-  }
-
   window.Store = {
-    isRemote: remote,
-
     async save(registro) {
-      if (remote()) return post({ action: "save", registro });
-      const list = readLocal();
+      const list = leer();
       list.push(registro);
-      writeLocal(list);
+      escribir(list);
       return { ok: true };
     },
 
     async list() {
-      if (remote()) {
-        const res = await fetch(CONFIG.APPS_SCRIPT_URL + "?action=list");
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || "Error del servidor");
-        return data.registros;
-      }
-      return readLocal();
+      return leer();
     },
 
     async remove(id) {
-      if (remote()) return post({ action: "delete", id });
-      writeLocal(readLocal().filter((r) => r.id !== id));
+      escribir(leer().filter((r) => r.id !== id));
       return { ok: true };
+    },
+
+    // Une registros de una copia de seguridad sin duplicar (por id)
+    async importar(registros) {
+      const list = leer();
+      const ids = new Set(list.map((r) => r.id));
+      let nuevos = 0;
+      for (const r of registros) {
+        if (r && r.id && r.fecha && r.turno && Array.isArray(r.personas) && !ids.has(r.id)) {
+          list.push(r);
+          ids.add(r.id);
+          nuevos++;
+        }
+      }
+      escribir(list);
+      return nuevos;
     },
   };
 })();

@@ -30,9 +30,6 @@
 
   <!-- Panel -->
   <main class="wrap hidden" id="vistaPanel">
-    <div id="modoPrueba" class="alert info hidden">
-      Modo prueba: solo ves los registros hechos en este navegador. Configura Google Sheets en <code>config.js</code>.
-    </div>
     <div id="msg" class="alert hidden"></div>
 
     <div class="stats">
@@ -67,6 +64,19 @@
           <button class="btn-light" id="bRefrescar">↻ Actualizar</button>
           <button class="btn-primary" id="bExportar">Descargar Excel (CSV)</button>
         </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Copia de seguridad</h2>
+      <p class="contador" style="margin:0 0 12px">
+        Los registros se guardan en este aplicativo, en este equipo. Descarga una copia de seguridad con frecuencia,
+        y úsala para pasar los registros a otro equipo.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-light" id="bBackup">⬇ Descargar copia de seguridad</button>
+        <button class="btn-light" id="bRestaurar">⬆ Cargar copia de seguridad</button>
+        <input type="file" id="fileRestaurar" accept=".json,application/json" class="hidden" />
       </div>
     </section>
 
@@ -113,7 +123,6 @@
     function entrar() {
       $("#vistaLogin").classList.add("hidden");
       $("#vistaPanel").classList.remove("hidden");
-      if (!Store.isRemote()) $("#modoPrueba").classList.remove("hidden");
       $("#fDesde").value = fechaLocal(0);
       $("#fHasta").value = fechaLocal(0);
       cargar();
@@ -218,6 +227,32 @@
     $("#bHoy").onclick = () => { $("#fDesde").value = $("#fHasta").value = fechaLocal(0); render(); };
     $("#bSemana").onclick = () => { $("#fDesde").value = fechaLocal(-6); $("#fHasta").value = fechaLocal(0); render(); };
     $("#bTodo").onclick = () => { $("#fDesde").value = $("#fHasta").value = ""; render(); };
+
+    $("#bBackup").onclick = async () => {
+      const data = await Store.list();
+      const blob = new Blob([JSON.stringify({ app: "inlotrans-asistencia", generado: new Date().toISOString(), registros: data }, null, 1)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `respaldo_asistencia_inlotrans_${fechaLocal(0)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+    $("#bRestaurar").onclick = () => $("#fileRestaurar").click();
+    $("#fileRestaurar").onchange = async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      try {
+        const json = JSON.parse(await file.text());
+        const lista = Array.isArray(json) ? json : json.registros;
+        if (!Array.isArray(lista)) throw new Error("archivo no válido");
+        const nuevos = await Store.importar(lista);
+        await cargar();
+        mostrar("ok", `Copia cargada: ${nuevos} registro(s) nuevo(s) agregado(s).`);
+      } catch (err) {
+        mostrar("err", "No se pudo cargar la copia: " + err.message);
+      }
+    };
 
     $("#bExportar").onclick = () => {
       const cab = ["Fecha", "Turno", "Nombre", "Cedula", "Labor", "Registro", "Observaciones"];

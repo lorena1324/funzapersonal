@@ -1,33 +1,22 @@
 # Registro de Asistencia por Turno · INLOTRANS PEPSICO MP
 
-- **`index.html`**: el formulario donde el supervisor registra la fecha, el turno (T1, T2 o T3) y las personas que asistieron (nombre, cédula y cargo).
-- **`admin.html`**: el panel de administración, protegido con un PIN. Muestra quién vino en cada turno, permite filtrar por fecha, turno o nombre, descargar la información a Excel (CSV) y eliminar registros.
-- **Almacenamiento**: Google Sheets, a través de Google Apps Script. Mientras no lo configures, todo se guarda solo en el navegador (modo prueba).
+- **`index.html`**: el formulario para registrar asistencia. Se escoge la fecha y el turno (T1, T2 o T3) y se digita la cédula de cada persona. El nombre y la labor se llenan solos desde `personal.js`.
+- **`admin.html`**: el panel de administración, protegido con un PIN que se cambia en `config.js`. Muestra quién vino en cada turno, permite filtrar, descargar en Excel (CSV) y eliminar registros.
+- **Almacenamiento**: dentro del aplicativo, en la memoria del navegador del equipo donde se usa. No hay ninguna base de datos externa.
 
-## 1. Conectar con Google Sheets (una sola vez)
+## Importante sobre el almacenamiento
 
-1. Crea una hoja de cálculo nueva en Google Sheets, por ejemplo **"Asistencia INLOTRANS PEPSICO MP"**.
-2. Abre **Extensiones → Apps Script**.
-3. Borra el contenido de `Code.gs` y pega el de [`apps-script/Code.gs`](apps-script/Code.gs). Guarda.
-4. Haz clic en **Implementar → Nueva implementación**:
-   - Tipo: **Aplicación web**
-   - Ejecutar como: **Yo**
-   - Quién tiene acceso: **Cualquier persona**
-5. Autoriza los permisos y copia la **URL de la aplicación web**. Termina en `/exec`.
-6. Pega esa URL en [`config.js`](config.js), en `APPS_SCRIPT_URL`.
-7. Cambia `ADMIN_PIN` en `config.js` por tu propio PIN.
+- Los registros quedan guardados **en el equipo y el navegador** donde se llena el formulario. El panel admin muestra lo que se registró en ese mismo equipo y navegador.
+- Si se borran los datos de navegación, o si se usa el modo incógnito, los registros se pierden. Por eso hay que usar **Descargar copia de seguridad** en el panel admin con frecuencia.
+- Para pasar los registros a otro equipo, descarga la copia de seguridad en el primero y cárgala en el segundo con **Cargar copia de seguridad**. No se duplican registros.
 
-La hoja **Asistencia** se crea sola con el primer registro, con una fila por persona.
+## Personal
 
-> Si después cambias `Code.gs`, ve a **Implementar → Gestionar implementaciones → Editar → Nueva versión**. Si no lo haces, los cambios no se aplican.
+Edita `personal.js` para agregar o quitar personas. Cada persona va en una línea: `["cédula", "NOMBRE", "LABOR"]`.
 
-## 2. Publicar con GitHub Pages
+## Publicar con GitHub Pages
 
-En el repositorio, entra a **Settings → Pages**. En *Source* elige **Deploy from a branch**, rama `main` y carpeta `/ (root)`. Queda disponible en:
+Entra a **Settings → Pages**, elige la rama `main` y la carpeta `/ (root)`.
 
 - Formulario: `https://lorena1324.github.io/funzapersonal/`
 - Admin: `https://lorena1324.github.io/funzapersonal/admin.html`
-
-## Nota de seguridad
-
-El PIN del admin está en `config.js`, que es público, así que solo evita entradas casuales y no es una protección real. Cualquiera que tenga la URL del Apps Script puede leer los datos. Para controlar el acceso de verdad, comparte solo la hoja de Google con las personas autorizadas y revisa la información desde ahí.
