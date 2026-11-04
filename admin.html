@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Panel Admin · Asistencia INLOTRANS PEPSICO MP</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <div>
+        <h1>Panel de Administración</h1>
+        <p>Asistencia por turno · INLOTRANS · PEPSICO MP</p>
+      </div>
+      <a href="index.html">← Ir al formulario</a>
+    </div>
+  </header>
+
+  <!-- Login -->
+  <main class="wrap" id="vistaLogin">
+    <form class="card login" id="loginForm">
+      <h2>Ingreso administrador</h2>
+      <label for="pin">PIN</label>
+      <input type="password" id="pin" autocomplete="current-password" required />
+      <div id="loginErr" class="alert err hidden" style="margin:12px 0 0">PIN incorrecto.</div>
+      <button class="btn-primary" style="width:100%;margin-top:14px">Entrar</button>
+    </form>
+  </main>
+
+  <!-- Panel -->
+  <main class="wrap hidden" id="vistaPanel">
+    <div id="modoPrueba" class="alert info hidden">
+      Modo prueba: solo ves los registros hechos en este navegador. Configura Google Sheets en <code>config.js</code>.
+    </div>
+    <div id="msg" class="alert hidden"></div>
+
+    <div class="stats">
+      <div class="stat"><small>Personas (filtro)</small><div id="sTotal">0</div></div>
+      <div class="stat t1"><small>Turno T1</small><div id="sT1">0</div></div>
+      <div class="stat t2"><small>Turno T2</small><div id="sT2">0</div></div>
+      <div class="stat t3"><small>Turno T3</small><div id="sT3">0</div></div>
+    </div>
+
+    <section class="card">
+      <div class="filtros">
+        <div><label for="fDesde">Desde</label><input type="date" id="fDesde" /></div>
+        <div><label for="fHasta">Hasta</label><input type="date" id="fHasta" /></div>
+        <div>
+          <label for="fTurno">Turno</label>
+          <select id="fTurno">
+            <option value="">Todos</option>
+            <option value="T1">T1 · Mañana</option>
+            <option value="T2">T2 · Tarde</option>
+            <option value="T3">T3 · Noche</option>
+          </select>
+        </div>
+        <div><label for="fBuscar">Buscar</label><input type="search" id="fBuscar" placeholder="Nombre, cédula, cargo…" /></div>
+      </div>
+      <div class="actions" style="margin-top:14px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-light" id="bHoy">Hoy</button>
+          <button class="btn-light" id="bSemana">Últimos 7 días</button>
+          <button class="btn-light" id="bTodo">Todo</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-light" id="bRefrescar">↻ Actualizar</button>
+          <button class="btn-primary" id="bExportar">Descargar Excel (CSV)</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 id="tituloTabla">Personas registradas</h2>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Turno</th><th>Nombre</th><th>Cédula</th><th>Cargo</th>
+              <th>Registró</th><th>Observaciones</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div id="vacio" class="vacio hidden">No hay registros con estos filtros.</div>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="storage.js"></script>
+  <script>
+    const $ = (s) => document.querySelector(s);
+    let registros = [];
+    let filasActuales = [];
+
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    function fechaLocal(offsetDias = 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + offsetDias);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    }
+
+    function mostrar(tipo, texto) {
+      const m = $("#msg");
+      m.className = "alert " + tipo;
+      m.textContent = texto;
+    }
+
+    // ---- Login ----
+    function entrar() {
+      $("#vistaLogin").classList.add("hidden");
+      $("#vistaPanel").classList.remove("hidden");
+      if (!Store.isRemote()) $("#modoPrueba").classList.remove("hidden");
+      $("#fDesde").value = fechaLocal(0);
+      $("#fHasta").value = fechaLocal(0);
+      cargar();
+    }
+    $("#loginForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if ($("#pin").value === String(CONFIG.ADMIN_PIN)) {
+        sessionStorage.setItem("inlotrans_admin", "1");
+        entrar();
+      } else {
+        $("#loginErr").classList.remove("hidden");
+      }
+    });
+    if (sessionStorage.getItem("inlotrans_admin") === "1") entrar();
+
+    // ---- Datos ----
+    async function cargar() {
+      $("#bRefrescar").disabled = true;
+      $("#bRefrescar").textContent = "Cargando…";
+      try {
+        registros = await Store.list();
+        $("#msg").classList.add("hidden");
+      } catch (err) {
+        mostrar("err", "No se pudieron cargar los datos: " + err.message);
+      } finally {
+        $("#bRefrescar").disabled = false;
+        $("#bRefrescar").textContent = "↻ Actualizar";
+      }
+      render();
+    }
+
+    function filtrar() {
+      const desde = $("#fDesde").value;
+      const hasta = $("#fHasta").value;
+      const turno = $("#fTurno").value;
+      const q = $("#fBuscar").value.trim().toLowerCase();
+      const filas = [];
+      for (const r of registros) {
+        if (desde && r.fecha < desde) continue;
+        if (hasta && r.fecha > hasta) continue;
+        if (turno && r.turno !== turno) continue;
+        for (const p of r.personas) {
+          const texto = [p.nombre, p.documento, p.cargo, r.responsable].join(" ").toLowerCase();
+          if (q && !texto.includes(q)) continue;
+          filas.push({ ...p, fecha: r.fecha, turno: r.turno, responsable: r.responsable, observaciones: r.observaciones, id: r.id });
+        }
+      }
+      const orden = { T1: 1, T2: 2, T3: 3 };
+      filas.sort((a, b) => b.fecha.localeCompare(a.fecha) || orden[a.turno] - orden[b.turno] || a.nombre.localeCompare(b.nombre));
+      return filas;
+    }
+
+    function render() {
+      const filas = filtrar();
+      filasActuales = filas;
+      const cuenta = { T1: 0, T2: 0, T3: 0 };
+      filas.forEach((f) => cuenta[f.turno] !== undefined && cuenta[f.turno]++);
+      $("#sTotal").textContent = filas.length;
+      $("#sT1").textContent = cuenta.T1;
+      $("#sT2").textContent = cuenta.T2;
+      $("#sT3").textContent = cuenta.T3;
+
+      const vistosId = new Set();
+      $("#tbody").innerHTML = filas.map((f) => {
+        // El botón eliminar aparece una vez por registro (en su primera fila)
+        const primera = !vistosId.has(f.id);
+        vistosId.add(f.id);
+        return `<tr>
+          <td>${esc(f.fecha)}</td>
+          <td><span class="badge ${esc(f.turno)}">${esc(f.turno)}</span></td>
+          <td>${esc(f.nombre)}</td>
+          <td>${esc(f.documento)}</td>
+          <td>${esc(f.cargo)}</td>
+          <td>${esc(f.responsable)}</td>
+          <td>${esc(f.observaciones)}</td>
+          <td>${primera ? `<button class="btn-danger" data-id="${esc(f.id)}" title="Eliminar todo este registro">Eliminar</button>` : ""}</td>
+        </tr>`;
+      }).join("");
+      $("#vacio").classList.toggle("hidden", filas.length > 0);
+    }
+
+    $("#tbody").addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-id]");
+      if (!btn) return;
+      const reg = registros.find((r) => r.id === btn.dataset.id);
+      if (!reg) return;
+      if (!confirm(`¿Eliminar el registro de ${reg.turno} del ${reg.fecha} hecho por ${reg.responsable}? (${reg.personas.length} persona(s))`)) return;
+      btn.disabled = true;
+      try {
+        await Store.remove(reg.id);
+        await cargar();
+        mostrar("ok", "Registro eliminado.");
+      } catch (err) {
+        mostrar("err", "No se pudo eliminar: " + err.message);
+        btn.disabled = false;
+      }
+    });
+
+    ["#fDesde", "#fHasta", "#fTurno"].forEach((s) => $(s).addEventListener("change", render));
+    $("#fBuscar").addEventListener("input", render);
+    $("#bRefrescar").onclick = cargar;
+    $("#bHoy").onclick = () => { $("#fDesde").value = $("#fHasta").value = fechaLocal(0); render(); };
+    $("#bSemana").onclick = () => { $("#fDesde").value = fechaLocal(-6); $("#fHasta").value = fechaLocal(0); render(); };
+    $("#bTodo").onclick = () => { $("#fDesde").value = $("#fHasta").value = ""; render(); };
+
+    $("#bExportar").onclick = () => {
+      const cab = ["Fecha", "Turno", "Nombre", "Cedula", "Cargo", "Registro", "Observaciones"];
+      const csvEsc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const lineas = [cab.join(";")].concat(
+        filasActuales.map((f) => [f.fecha, f.turno, f.nombre, f.documento, f.cargo, f.responsable, f.observaciones].map(csvEsc).join(";"))
+      );
+      const blob = new Blob(["﻿" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `asistencia_inlotrans_${$("#fDesde").value || "inicio"}_${$("#fHasta").value || "hoy"}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+  </script>
+</body>
+</html>

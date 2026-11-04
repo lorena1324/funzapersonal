@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Registro de Asistencia · INLOTRANS PEPSICO MP</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <div>
+        <h1>Registro de Asistencia por Turno</h1>
+        <p>INLOTRANS · PEPSICO MP</p>
+      </div>
+      <a href="admin.html">Panel admin →</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="modoPrueba" class="alert info hidden">
+      Modo prueba: los registros se guardan solo en este navegador. Configura Google Sheets en <code>config.js</code> para guardarlos en el sistema.
+    </div>
+    <div id="msg" class="alert hidden"></div>
+
+    <form id="form" novalidate>
+      <section class="card">
+        <h2>1. Datos del turno</h2>
+        <div class="grid">
+          <div>
+            <label for="fecha">Fecha</label>
+            <input type="date" id="fecha" required />
+          </div>
+          <div>
+            <label for="responsable">Quién registra (supervisor / líder)</label>
+            <input type="text" id="responsable" placeholder="Nombre completo" required />
+          </div>
+        </div>
+
+        <label style="margin-top:16px">Turno</label>
+        <div class="turnos" role="radiogroup">
+          <input type="radio" name="turno" id="t1" value="T1" required />
+          <label for="t1"><b>T1</b><span>Mañana</span></label>
+          <input type="radio" name="turno" id="t2" value="T2" />
+          <label for="t2"><b>T2</b><span>Tarde</span></label>
+          <input type="radio" name="turno" id="t3" value="T3" />
+          <label for="t3"><b>T3</b><span>Noche</span></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2. Personas que asistieron</h2>
+        <div class="persona persona-head">
+          <span></span><span>Nombre completo *</span><span>Cédula *</span><span>Cargo</span><span></span>
+        </div>
+        <div id="personas"></div>
+        <div class="actions" style="margin-top:12px">
+          <button type="button" class="btn-light" id="agregar">+ Agregar persona</button>
+          <span class="contador" id="contador">0 personas</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3. Observaciones (opcional)</h2>
+        <textarea id="observaciones" placeholder="Novedades del turno, ausencias, reemplazos…"></textarea>
+      </section>
+
+      <div class="actions">
+        <span></span>
+        <button type="submit" class="btn-primary" id="enviar">Guardar asistencia</button>
+      </div>
+    </form>
+  </main>
+
+  <template id="tplPersona">
+    <div class="persona">
+      <span class="num"></span>
+      <input type="text" class="nombre" placeholder="Nombre completo" />
+      <input type="text" class="doc" placeholder="Cédula" inputmode="numeric" />
+      <input type="text" class="cargo" placeholder="Cargo (ej. Auxiliar)" list="cargos" />
+      <button type="button" class="btn-icon quitar" title="Quitar">✕</button>
+    </div>
+  </template>
+  <datalist id="cargos">
+    <option value="Auxiliar de bodega"></option>
+    <option value="Montacarguista"></option>
+    <option value="Conductor"></option>
+    <option value="Supervisor"></option>
+    <option value="Coordinador"></option>
+    <option value="Operario"></option>
+  </datalist>
+
+  <script src="config.js"></script>
+  <script src="storage.js"></script>
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const lista = $("#personas");
+    const tpl = $("#tplPersona");
+
+    function hoy() {
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    }
+
+    function renumerar() {
+      const filas = lista.querySelectorAll(".persona");
+      filas.forEach((f, i) => (f.querySelector(".num").textContent = i + 1));
+      $("#contador").textContent = filas.length + (filas.length === 1 ? " persona" : " personas");
+    }
+
+    function agregarPersona(focus) {
+      const fila = tpl.content.firstElementChild.cloneNode(true);
+      fila.querySelector(".quitar").onclick = () => {
+        if (lista.children.length > 1) fila.remove();
+        else fila.querySelectorAll("input").forEach((i) => (i.value = ""));
+        renumerar();
+      };
+      // Enter en el último campo agrega otra fila
+      fila.querySelector(".cargo").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); agregarPersona(true); }
+      });
+      lista.appendChild(fila);
+      renumerar();
+      if (focus) fila.querySelector(".nombre").focus();
+    }
+
+    function mostrar(tipo, texto) {
+      const m = $("#msg");
+      m.className = "alert " + tipo;
+      m.textContent = texto;
+      m.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function reiniciar() {
+      lista.innerHTML = "";
+      for (let i = 0; i < 3; i++) agregarPersona(false);
+      $("#observaciones").value = "";
+      document.querySelectorAll('input[name="turno"]').forEach((r) => (r.checked = false));
+    }
+
+    $("#agregar").onclick = () => agregarPersona(true);
+
+    $("#form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fecha = $("#fecha").value;
+      const responsable = $("#responsable").value.trim();
+      const turnoEl = document.querySelector('input[name="turno"]:checked');
+
+      if (!fecha) return mostrar("err", "Selecciona la fecha.");
+      if (!responsable) return mostrar("err", "Escribe quién registra.");
+      if (!turnoEl) return mostrar("err", "Selecciona el turno (T1, T2 o T3).");
+
+      const personas = [];
+      const vistos = new Set();
+      for (const f of lista.querySelectorAll(".persona")) {
+        const nombre = f.querySelector(".nombre").value.trim();
+        const documento = f.querySelector(".doc").value.trim();
+        const cargo = f.querySelector(".cargo").value.trim();
+        if (!nombre && !documento && !cargo) continue; // fila vacía
+        if (!nombre || !documento)
+          return mostrar("err", "Cada persona debe tener nombre y cédula (fila " + f.querySelector(".num").textContent + ").");
+        if (vistos.has(documento))
+          return mostrar("err", "La cédula " + documento + " está repetida.");
+        vistos.add(documento);
+        personas.push({ nombre, documento, cargo });
+      }
+      if (!personas.length) return mostrar("err", "Agrega al menos una persona.");
+
+      const registro = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        fecha,
+        turno: turnoEl.value,
+        responsable,
+        observaciones: $("#observaciones").value.trim(),
+        personas,
+        creado: new Date().toISOString(),
+      };
+
+      const btn = $("#enviar");
+      btn.disabled = true;
+      btn.textContent = "Guardando…";
+      try {
+        await Store.save(registro);
+        localStorage.setItem("inlotrans_responsable", responsable);
+        mostrar("ok", `✔ Asistencia guardada: ${personas.length} persona(s) en ${registro.turno} del ${fecha}.`);
+        reiniciar();
+      } catch (err) {
+        mostrar("err", "No se pudo guardar: " + err.message + ". Revisa tu conexión e intenta de nuevo.");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Guardar asistencia";
+      }
+    });
+
+    // Inicio
+    $("#fecha").value = hoy();
+    $("#responsable").value = localStorage.getItem("inlotrans_responsable") || "";
+    if (!Store.isRemote()) $("#modoPrueba").classList.remove("hidden");
+    reiniciar();
+  </script>
+</body>
+</html>
