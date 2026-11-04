@@ -55,7 +55,7 @@
             <option value="T3">T3 · Noche</option>
           </select>
         </div>
-        <div><label for="fBuscar">Buscar</label><input type="search" id="fBuscar" placeholder="Nombre, cédula, cargo…" /></div>
+        <div><label for="fBuscar">Buscar</label><input type="search" id="fBuscar" placeholder="Nombre, cédula, labor…" /></div>
       </div>
       <div class="actions" style="margin-top:14px">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -76,7 +76,7 @@
         <table>
           <thead>
             <tr>
-              <th>Fecha</th><th>Turno</th><th>Nombre</th><th>Cédula</th><th>Cargo</th>
+              <th>Fecha</th><th>Turno</th><th>Nombre</th><th>Cédula</th><th>Labor</th>
               <th>Registró</th><th>Observaciones</th><th></th>
             </tr>
           </thead>
@@ -220,7 +220,7 @@
     $("#bTodo").onclick = () => { $("#fDesde").value = $("#fHasta").value = ""; render(); };
 
     $("#bExportar").onclick = () => {
-      const cab = ["Fecha", "Turno", "Nombre", "Cedula", "Cargo", "Registro", "Observaciones"];
+      const cab = ["Fecha", "Turno", "Nombre", "Cedula", "Labor", "Registro", "Observaciones"];
       const csvEsc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
       const lineas = [cab.join(";")].concat(
         filasActuales.map((f) => [f.fecha, f.turno, f.nombre, f.documento, f.cargo, f.responsable, f.observaciones].map(csvEsc).join(";"))

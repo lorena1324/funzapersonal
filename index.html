@@ -51,7 +51,7 @@
       <section class="card">
         <h2>2. Personas que asistieron</h2>
         <div class="persona persona-head">
-          <span></span><span>Nombre completo *</span><span>Cédula *</span><span>Cargo</span><span></span>
+          <span></span><span>Cédula *</span><span>Nombres y apellidos</span><span>Labor</span><span></span>
         </div>
         <div id="personas"></div>
         <div class="actions" style="margin-top:12px">
@@ -75,22 +75,16 @@
   <template id="tplPersona">
     <div class="persona">
       <span class="num"></span>
-      <input type="text" class="nombre" placeholder="Nombre completo" />
-      <input type="text" class="doc" placeholder="Cédula" inputmode="numeric" />
-      <input type="text" class="cargo" placeholder="Cargo (ej. Auxiliar)" list="cargos" />
+      <input type="text" class="doc" placeholder="Digite la cédula" inputmode="numeric" list="cedulas" autocomplete="off" />
+      <input type="text" class="nombre" placeholder="—" readonly tabindex="-1" />
+      <input type="text" class="cargo" placeholder="—" readonly tabindex="-1" />
       <button type="button" class="btn-icon quitar" title="Quitar">✕</button>
     </div>
   </template>
-  <datalist id="cargos">
-    <option value="Auxiliar de bodega"></option>
-    <option value="Montacarguista"></option>
-    <option value="Conductor"></option>
-    <option value="Supervisor"></option>
-    <option value="Coordinador"></option>
-    <option value="Operario"></option>
-  </datalist>
+  <datalist id="cedulas"></datalist>
 
   <script src="config.js"></script>
+  <script src="personal.js"></script>
   <script src="storage.js"></script>
   <script>
     const $ = (s) => document.querySelector(s);
@@ -116,13 +110,29 @@
         else fila.querySelectorAll("input").forEach((i) => (i.value = ""));
         renumerar();
       };
-      // Enter en el último campo agrega otra fila
-      fila.querySelector(".cargo").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); agregarPersona(true); }
+      const doc = fila.querySelector(".doc");
+      const completar = () => {
+        const p = buscarPersona(doc.value);
+        const vacio = !doc.value.trim();
+        fila.querySelector(".nombre").value = p ? p.nombre : vacio ? "" : "No está en la lista del personal";
+        fila.querySelector(".cargo").value = p ? p.cargo : "";
+        fila.classList.toggle("ok", !!p);
+        fila.classList.toggle("noexiste", !p && !vacio);
+        return p;
+      };
+      doc.addEventListener("input", completar);
+      // Enter en la cédula pasa a una nueva fila
+      doc.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        if (!completar()) return;
+        const sig = fila.nextElementSibling;
+        if (sig) sig.querySelector(".doc").focus();
+        else agregarPersona(true);
       });
       lista.appendChild(fila);
       renumerar();
-      if (focus) fila.querySelector(".nombre").focus();
+      if (focus) doc.focus();
     }
 
     function mostrar(tipo, texto) {
@@ -154,16 +164,15 @@
       const personas = [];
       const vistos = new Set();
       for (const f of lista.querySelectorAll(".persona")) {
-        const nombre = f.querySelector(".nombre").value.trim();
-        const documento = f.querySelector(".doc").value.trim();
-        const cargo = f.querySelector(".cargo").value.trim();
-        if (!nombre && !documento && !cargo) continue; // fila vacía
-        if (!nombre || !documento)
-          return mostrar("err", "Cada persona debe tener nombre y cédula (fila " + f.querySelector(".num").textContent + ").");
-        if (vistos.has(documento))
-          return mostrar("err", "La cédula " + documento + " está repetida.");
-        vistos.add(documento);
-        personas.push({ nombre, documento, cargo });
+        const valor = f.querySelector(".doc").value.trim();
+        if (!valor) continue; // fila vacía
+        const p = buscarPersona(valor);
+        if (!p)
+          return mostrar("err", "La cédula " + valor + " (fila " + f.querySelector(".num").textContent + ") no está en la lista del personal.");
+        if (vistos.has(p.documento))
+          return mostrar("err", p.nombre + " está repetido(a).");
+        vistos.add(p.documento);
+        personas.push(p);
       }
       if (!personas.length) return mostrar("err", "Agrega al menos una persona.");
 
@@ -194,6 +203,7 @@
     });
 
     // Inicio
+    $("#cedulas").innerHTML = PERSONAL.map((p) => `<option value="${p[0]}">${p[1]} · ${p[2]}</option>`).join("");
     $("#fecha").value = hoy();
     $("#responsable").value = localStorage.getItem("inlotrans_responsable") || "";
     if (!Store.isRemote()) $("#modoPrueba").classList.remove("hidden");

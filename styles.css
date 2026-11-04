@@ -92,6 +92,9 @@ textarea { min-height: 70px; resize: vertical; }
   background: var(--azul-claro); color: var(--azul);
   display: grid; place-items: center; font-size: .8rem; font-weight: 700;
 }
+.persona input[readonly] { background: var(--fondo); color: var(--texto); }
+.persona.ok input[readonly] { background: #e7f6ee; border-color: #bfe5cf; font-weight: 600; }
+.persona.noexiste .nombre { background: #fdeef0; border-color: #f1c4c8; color: var(--rojo); }
 .persona-head { font-size: .78rem; color: var(--gris); font-weight: 600; margin-bottom: 6px; }
 
 button {
@@ -152,7 +155,7 @@ tr:hover td { background: #fafcfe; }
 @media (max-width: 640px) {
   .stats { grid-template-columns: repeat(2, 1fr); }
   .persona { grid-template-columns: 28px 1fr 40px; }
-  .persona .doc, .persona .cargo { grid-column: 2 / 3; }
+  .persona .nombre, .persona .cargo { grid-column: 2 / 3; }
   .persona-head { display: none; }
   .persona { padding-bottom: 10px; border-bottom: 1px dashed var(--borde); }
   .turnos label b { font-size: 1.15rem; }
